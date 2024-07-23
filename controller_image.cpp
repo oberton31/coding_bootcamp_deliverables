@@ -10,8 +10,8 @@
 class ControllerImage {
 public:
     ControllerImage() {
-        ros::Nodehandle nh;
-        game_image_sub_ = nh.subscribe("/game_image", 10, &ControllerImage::game_image_callback, this);
+        ros::NodeHandle nh;
+        image_sub_ = nh.subscribe("/game_image", 1, &ControllerImage::game_image_callback, this);
         joy_pub_ = nh.advertise<sensor_msgs::Joy>("/joy", 10);
     }
 private:
@@ -20,13 +20,13 @@ private:
         double y;
         double vx;
         double vy;
-    }
+    };
 
     struct Explosion {
         double radius;
         double x;
         double y;
-    }
+    };
 
     ros::Subscriber image_sub_;
     ros::Publisher joy_pub_;
@@ -38,15 +38,19 @@ private:
         cv_bridge::CvImagePtr cv_ptr;
 
         try {
-            cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+            cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::RGB8);
         } catch (cv_bridge::Exception& e) {
             ROS_ERROR("cv_bridge exception: %s", e.what());
             return;
         }
         cv::Mat image = cv_ptr->image;
         std::vector<Projectile> projectiles;
+
+        // find player, if you do not find player, do not proceed
+        // if you find player, set dt
+        float dt = 1;
         find_projectiles(projectiles, image, dt); // need to implement dt later
-        find_explosions(explosions, image);
+        //find_explosions(explosions, image);
 
         // find player on map
 
@@ -59,37 +63,58 @@ private:
         // Here, find colors that signal an explosion
         // Then, add center of explosion and radius of explosion 
 
+
+
     }
     void find_projectiles(std::vector<Projectile>& projectiles, cv::Mat& image, float dt) {
 
         // use HSV image format
+        /*
         cv::Mat hsv_image;
         cv::cvtColor(image, hsv_image, cv::COLOR_BGR2HSV);
         cv::Scalar lower_yellow = cv::Scalar(20, 100, 100);
-        cv::Scalar upper_yellow = cv::Scalar(30, 255, 255);
+        cv::Scalar upper_yellow = cv::Scalar(40, 255, 255);
 
         cv::Mat yellow_mask;
-        cv::inRange(hsv_image, lower_yellow, upper_yellow, yellow_mask);
+        //cv::inRange(hsv_image, lower_yellow, upper_yellow, yellow_mask);
 
         std::vector<std::vector<cv::Point>> contours;
-        cv::findContours(yellow_mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+        cv::findContours(hsv_image, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+        */
+        cv::imshow("Input Image", image);
+        cv::waitKey(0); 
+        cv::Mat gray_image;
+        if (image.channels() > 1) {
+            cv::cvtColor(image, gray_image, cv::COLOR_BGR2GRAY);
+        } else {
+            gray_image = image.clone();
+        }
+
+        // Threshold the grayscale image to binary (assuming yellow circles are already prominent)
+        cv::Mat binary_image;
+        cv::threshold(gray_image, binary_image, 1, 255, cv::THRESH_BINARY);
+
+        // Find contours in the binary image
+        std::vector<std::vector<cv::Point>> contours;
+        cv::findContours(binary_image, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+        ROS_INFO("Number of contours detected: %lu", contours.size());
 
         for (const auto& contour : contours) {
             // Fit a minimum enclosing circle around the contour
             cv::Point2f center;
             float radius;
             cv::minEnclosingCircle(contour, center, radius);
-            // store projectiles
-            projectiles.push_back({center.x, center.y, 0.0, 0.0}); // figll in velocities after
+            ROS_INFO("Radius: %f", radius);
+            projectiles.push_back({center.x, center.y, 0.0, 0.0}); // fill in velocities after
         }
+
         if (!prev_projectiles.empty()) {
             for (auto& projectile : projectiles) {
                 for (auto it = prev_projectiles.begin(); it != prev_projectiles.end();) {
                     // Calculate distance between current projectile and previous projectile
                     float distance = std::sqrt(std::pow(it->x - projectile.x, 2) + std::pow(it->y - projectile.y, 2));
-                    
                     // Check if the projectiles are within the proximity threshold (e.g., 10 pixels)
-                    if (distance < 10.0) {
+                    if (distance < 5.0) {
                         // Calculate velocities vx and vy
                         projectile.vx = (projectile.x - it->x) / dt;
                         projectile.vy = (projectile.y - it->y) / dt;
