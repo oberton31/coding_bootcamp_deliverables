@@ -2,4 +2,4 @@
 
 lab1_pkg -> "Exercise:Test Your Understanding"
 
-controller_full_state.cpp -> "Programming Familiarization Part 1, Section 2.3"
+controller_full_state.cpp -> "Programming Familiarization Part 1, Section 2"
